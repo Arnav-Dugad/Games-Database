@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lumina | Game Encyclopedia</title>
+    <title>PixelPop | Steam Database</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -11,441 +14,536 @@
     
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        paper: '#fcfcfc',
-                        ink: '#1a1a1a',
-                        subtle: '#f4f4f5',
-                        accent: '#2563eb', // Royal Blue
-                        secondary: '#64748b'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        serif: ['Playfair Display', 'serif']
-                    },
-                    boxShadow: {
-                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-                        'hover': '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
-                    }
-                }
-            }
-        }
-    </script>
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-    
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Google Fonts: Outfit for that modern, fun look -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 
     <style>
         body {
-            background-color: #fcfcfc;
-            color: #1a1a1a;
-            font-family: 'Inter', sans-serif;
-            -webkit-font-smoothing: antialiased;
+            font-family: 'Outfit', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
         }
         
-        /* Smooth Fade In */
-        .fade-in {
-            animation: fadeIn 0.6s ease-out forwards;
-            opacity: 0;
-            transform: translateY(10px);
-        }
-        
-        @keyframes fadeIn {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Typography Utilities */
-        .font-serif-italic {
-            font-family: 'Playfair Display', serif;
-            font-style: italic;
-        }
-
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
         }
         ::-webkit-scrollbar-track {
-            background: transparent; 
+            background: #0f172a; 
         }
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 3px;
+            background: #334155; 
+            border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
+            background: #475569; 
         }
 
-        .line-clamp-3 {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        /* Hide scrollbar for horizontal scrolling areas */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Animation for modal */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-animate {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+
+        .loading-shimmer {
+            background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
     </style>
 </head>
 <body>
 
-    <div id="root"></div>
+<div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+<script type="text/babel">
 
-        // --- Wikipedia API Helper ---
-        const WIKI_API = "https://en.wikipedia.org/w/api.php";
-        
-        // --- Components ---
+    const STEAM_API_KEY = "BC3426ECCF0FA911B5E4A3987C03AD62";
+    
+    // We use a robust CORS proxy
+    const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+    
+    // A list of popular AppIDs to populate the DB initially
+    const FEATURED_APP_IDS = [
+        570, 730, 1085660, 271590, 1172470, 2357570, 1245620, 1091500, 
+        264710, 413150, 105600, 252490, 550, 292030, 1716740, 289070,
+        945360, 230410, 359550, 440
+    ];
 
-        const Icon = ({ name, className, weight = "regular" }) => {
-            return <i className={`ph ph-${name} ${className}`} style={{ fontWeight: weight }}></i>;
-        };
+    // Helper to map Genre text to Emoji
+    const getGenreIcon = (genreName) => {
+        const g = (genreName || '').toLowerCase();
+        if (g.includes('action')) return '⚔️';
+        if (g.includes('rpg') || g.includes('role')) return '🛡️';
+        if (g.includes('strategy')) return '♟️';
+        if (g.includes('adventure')) return '🌿';
+        if (g.includes('simulation')) return '🏗️';
+        if (g.includes('sports')) return '🏀';
+        if (g.includes('racing')) return '🏎️';
+        if (g.includes('horror')) return '👻';
+        return '🎮';
+    };
 
-        const Card = ({ title, snippet, pageId, onClick, delay }) => {
-            const [imageUrl, setImageUrl] = useState(null);
+    // Helper to get gradient based on ID (deterministic)
+    const getGradient = (id) => {
+        const gradients = [
+            "from-indigo-500 to-purple-600",
+            "from-orange-400 to-red-500",
+            "from-cyan-400 to-blue-500",
+            "from-emerald-400 to-teal-600",
+            "from-slate-500 to-slate-700",
+            "from-pink-500 to-rose-600",
+            "from-yellow-400 to-orange-500",
+            "from-violet-500 to-fuchsia-600"
+        ];
+        return gradients[id % gradients.length];
+    };
 
-            useEffect(() => {
-                // Fetch thumbnail for this specific card
-                const fetchImage = async () => {
-                    try {
-                        const params = new URLSearchParams({
-                            action: "query",
-                            prop: "pageimages",
-                            pageids: pageId,
-                            pithumbsize: 500,
-                            format: "json",
-                            origin: "*"
-                        });
-                        const res = await fetch(`${WIKI_API}?${params}`);
-                        const data = await res.json();
-                        const page = data.query.pages[pageId];
-                        if (page.thumbnail) {
-                            setImageUrl(page.thumbnail.source);
-                        }
-                    } catch (e) {
-                        console.error("Image fetch failed", e);
-                    }
-                };
-                fetchImage();
-            }, [pageId]);
+    // --- Fallback Data (Used if API fails) ---
+    const FALLBACK_GAMES = [
+        {
+            id: 570, steam_appid: 570, name: "Dota 2", genre: "MOBA", all_genres: [{description: "Action"}, {description: "Strategy"}],
+            metacritic: 90, release_date: {date: "9 Jul, 2013"}, developers: ["Valve"],
+            short_description: "Every day, millions of players worldwide enter battle as one of over a hundred Dota heroes. And no matter if it's their 10th hour of play or 1,000th, there's always something new to discover.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/570/header.jpg", price: "Free", color: "from-red-500 to-orange-600", icon: "⚔️"
+        },
+        {
+            id: 730, steam_appid: 730, name: "Counter-Strike 2", genre: "Action", all_genres: [{description: "Action"}, {description: "Shooter"}],
+            metacritic: 80, release_date: {date: "21 Aug, 2012"}, developers: ["Valve"],
+            short_description: "For over two decades, Counter-Strike has offered an elite competitive experience, one shaped by millions of players from across the globe. And now the next chapter in the CS story is about to begin. This is Counter-Strike 2.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg", price: "Free", color: "from-blue-500 to-indigo-600", icon: "🔫"
+        },
+        {
+            id: 1085660, steam_appid: 1085660, name: "Destiny 2", genre: "Action", all_genres: [{description: "Action"}, {description: "Adventure"}],
+            metacritic: 85, release_date: {date: "1 Oct, 2019"}, developers: ["Bungie"],
+            short_description: "Destiny 2 is an action MMO with a single evolving world that you and your friends can join anytime, anywhere, absolutely free.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1085660/header.jpg", price: "Free", color: "from-slate-700 to-white", icon: "🚀"
+        },
+        {
+            id: 271590, steam_appid: 271590, name: "Grand Theft Auto V", genre: "Action", all_genres: [{description: "Action"}, {description: "Adventure"}],
+            metacritic: 96, release_date: {date: "13 Apr, 2015"}, developers: ["Rockstar North"],
+            short_description: "Grand Theft Auto V for PC offers players the option to explore the award-winning world of Los Santos and Blaine County in resolutions of up to 4k and beyond, as well as the chance to experience the game running at 60 frames per second.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg", price: "$29.99", color: "from-green-500 to-emerald-700", icon: "🚗"
+        },
+         {
+            id: 1172470, steam_appid: 1172470, name: "Apex Legends™", genre: "Action", all_genres: [{description: "Action"}, {description: "Adventure"}],
+            metacritic: 88, release_date: {date: "4 Nov, 2020"}, developers: ["Respawn Entertainment"],
+            short_description: "Apex Legends is the award-winning, free-to-play Hero Shooter from Respawn Entertainment. Master an ever-growing roster of legendary characters with powerful abilities.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1172470/header.jpg", price: "Free", color: "from-red-600 to-rose-700", icon: "🛡️"
+        },
+        {
+            id: 2357570, steam_appid: 2357570, name: "Overwatch® 2", genre: "Action", all_genres: [{description: "Action"}],
+            metacritic: 79, release_date: {date: "10 Aug, 2023"}, developers: ["Blizzard Entertainment"],
+            short_description: "Overwatch 2 is a critically acclaimed, team-based shooter game set in an optimistic future with an evolving roster of heroes. Team up with friends and jump in today.",
+            header_image: "https://cdn.akamai.steamstatic.com/steam/apps/2357570/header.jpg", price: "Free", color: "from-orange-400 to-yellow-500", icon: "🦸"
+        }
+    ];
 
-            return (
-                <div 
-                    className="group cursor-pointer fade-in bg-white rounded-xl overflow-hidden border border-gray-100 hover:border-gray-200 shadow-soft hover:shadow-hover transition-all duration-500 flex flex-col h-full"
-                    style={{ animationDelay: `${delay}ms` }}
-                    onClick={onClick}
-                >
-                    <div className="aspect-[16/9] bg-gray-50 overflow-hidden relative">
-                        {imageUrl ? (
-                            <img 
-                                src={imageUrl} 
-                                alt={title} 
-                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 saturate-[0.9] group-hover:saturate-100" 
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-subtle text-gray-300">
-                                <Icon name="image" className="text-4xl" />
+    // --- Components ---
+
+    const SearchIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    );
+
+    const StarIcon = ({ filled }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={filled ? "text-yellow-400" : "text-slate-600"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+    );
+
+    const XIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    );
+
+    const SteamLogo = () => (
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M11.979 0C5.666 0 .506 4.936.041 11.165l4.304 6.273c.67-.184 1.344-.194 1.954.088l2.946-4.28c-.08-.501-.008-1.029.255-1.498a3.001 3.001 0 0 1 4.316-1.125 3.001 3.001 0 0 1 1.125 4.316 3.001 3.001 0 0 1-4.111 1.07l-3.255 4.695a3.46 3.46 0 0 1-1.033-.146l-4.225-6.155c.677 5.923 5.71 10.597 11.782 10.597 6.616 0 12-5.383 12-12S18.595 0 11.979 0z"/></svg>
+    );
+
+    // 1. Game Card
+    const GameCard = ({ game, onClick }) => {
+        return (
+            <div 
+                onClick={() => onClick(game)}
+                className="group relative bg-slate-800 rounded-3xl overflow-hidden cursor-pointer card-hover transition-all duration-300 border border-slate-700/50 hover:border-slate-500/50 h-full flex flex-col"
+            >
+                {/* Image Background */}
+                <div className="h-40 w-full relative overflow-hidden bg-slate-900">
+                    <img 
+                        src={game.header_image} 
+                        alt={game.name}
+                        className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+                        onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}
+                    />
+                    <div className={`hidden absolute inset-0 bg-gradient-to-r ${game.color} items-center justify-center`}>
+                        <span className="text-4xl">{game.icon}</span>
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent opacity-80"></div>
+                    
+                    <div className="absolute bottom-2 right-2">
+                        <span className="text-2xl drop-shadow-md">{game.icon}</span>
+                    </div>
+                </div>
+
+                <div className="p-5 flex-1 flex flex-col">
+                    <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-900/80 px-2 py-1 rounded-lg backdrop-blur-sm truncate max-w-[60%]">
+                            {game.genre}
+                        </span>
+                        {game.metacritic && (
+                            <div className="flex items-center space-x-1 text-green-400 bg-green-900/30 px-2 py-0.5 rounded">
+                                <span className="text-xs font-bold">{game.metacritic}</span>
                             </div>
                         )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300"></div>
                     </div>
                     
-                    <div className="p-6 flex flex-col flex-grow">
-                        <h3 className="font-serif text-xl font-bold text-ink mb-2 leading-tight group-hover:text-accent transition-colors">
-                            {title.replace(/\(video game\)/i, "")}
-                        </h3>
-                        <div 
-                            className="text-sm text-secondary line-clamp-3 leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: snippet }}
+                    <h3 className="text-lg font-bold text-white mb-1 leading-tight line-clamp-2">{game.name}</h3>
+                    <p className="text-slate-400 text-xs mt-auto pt-2">{game.developers?.[0] || "Unknown"} • {game.release_date?.date?.split(',')[1] || "N/A"}</p>
+                </div>
+            </div>
+        );
+    };
+
+    // 2. Filter Bar
+    const FilterBar = ({ genres, selected, onSelect }) => {
+        return (
+            <div className="flex items-center space-x-3 overflow-x-auto no-scrollbar py-4 mb-6">
+                <button 
+                    onClick={() => onSelect("All")}
+                    className={`px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 ${
+                        selected === "All" 
+                        ? "bg-white text-slate-900 shadow-lg shadow-white/10" 
+                        : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+                    }`}
+                >
+                    All Games
+                </button>
+                {genres.map(genre => (
+                    <button 
+                        key={genre}
+                        onClick={() => onSelect(genre)}
+                        className={`px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 ${
+                            selected === genre 
+                            ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                            : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+                        }`}
+                    >
+                        {genre}
+                    </button>
+                ))}
+            </div>
+        );
+    };
+
+    // 3. Modal
+    const Modal = ({ game, onClose }) => {
+        if (!game) return null;
+
+        React.useEffect(() => {
+            document.body.style.overflow = 'hidden';
+            return () => document.body.style.overflow = 'unset';
+        }, []);
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+                
+                <div className="relative w-full max-w-2xl bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl modal-animate flex flex-col max-h-[90vh]">
+                    
+                    {/* Header Image */}
+                    <div className="h-64 relative bg-slate-800 shrink-0">
+                         <img 
+                            src={game.header_image} 
+                            alt={game.name}
+                            className="w-full h-full object-cover"
                         />
-                        <div className="mt-auto pt-4 flex items-center text-xs font-semibold text-accent opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-                            READ ENTRY <Icon name="arrow-right" className="ml-1" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                        
+                        <button 
+                            onClick={onClose}
+                            className="absolute top-4 right-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full backdrop-blur-md transition-colors"
+                        >
+                            <XIcon />
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-8 overflow-y-auto -mt-12 relative z-10">
+                        <div className="flex justify-between items-end mb-6">
+                            <div>
+                                <h2 className="text-4xl font-bold text-white mb-2 shadow-black drop-shadow-md">{game.name}</h2>
+                                <p className="text-indigo-400 font-medium text-lg">{game.developers?.[0]}</p>
+                            </div>
+                            {game.metacritic && (
+                                <div className="flex flex-col items-center bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 shadow-lg">
+                                    <span className="text-2xl font-bold text-green-400">{game.metacritic}</span>
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold">Metascore</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2 mb-6 flex-wrap">
+                            <span className="px-3 py-1 bg-slate-800 text-white rounded-md text-sm font-semibold border border-slate-700">
+                                {game.genre}
+                            </span>
+                             <span className="px-3 py-1 bg-slate-800 text-slate-400 rounded-md text-sm font-semibold border border-slate-700">
+                                {game.release_date?.date || "Released"}
+                            </span>
+                             {game.price && (
+                                <span className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm font-semibold shadow-lg shadow-indigo-500/20">
+                                    {game.price}
+                                </span>
+                             )}
+                        </div>
+
+                        <div className="prose prose-invert max-w-none">
+                            <h3 className="text-lg font-semibold text-white mb-2">About</h3>
+                            <div className="text-slate-300 leading-relaxed text-sm" dangerouslySetInnerHTML={{__html: game.short_description}}></div>
+                        </div>
+
+                        <div className="mt-8 flex gap-4">
+                             <a href={`https://store.steampowered.com/app/${game.steam_appid}`} target="_blank" className="flex-1 py-3.5 bg-white text-slate-900 rounded-xl font-bold text-lg hover:bg-indigo-50 hover:scale-[1.02] transition-all shadow-lg shadow-indigo-500/20 active:scale-95 text-center flex items-center justify-center gap-2">
+                                <SteamLogo />
+                                View on Steam
+                            </a>
                         </div>
                     </div>
                 </div>
-            );
-        };
+            </div>
+        );
+    };
 
-        const Modal = ({ isOpen, onClose, title, pageId }) => {
-            const [content, setContent] = useState(null);
-            const [loading, setLoading] = useState(false);
-            const [fullImage, setFullImage] = useState(null);
+    // 4. Main App
+    const App = () => {
+        const [games, setGames] = React.useState([]);
+        const [loading, setLoading] = React.useState(true);
+        const [isOffline, setIsOffline] = React.useState(false);
+        
+        const [selectedGenre, setSelectedGenre] = React.useState("All");
+        const [searchQuery, setSearchQuery] = React.useState("");
+        const [selectedGame, setSelectedGame] = React.useState(null);
 
-            useEffect(() => {
-                if (isOpen && pageId) {
-                    setLoading(true);
-                    const fetchDetails = async () => {
-                        try {
-                            const params = new URLSearchParams({
-                                action: "query",
-                                prop: "extracts|pageimages",
-                                pageids: pageId,
-                                exintro: true, // Get introduction only
-                                explaintext: false, // Keep HTML for formatting
-                                pithumbsize: 1000,
-                                format: "json",
-                                origin: "*"
-                            });
-                            
-                            const res = await fetch(`${WIKI_API}?${params}`);
-                            const data = await res.json();
-                            const page = data.query.pages[pageId];
-                            
-                            setContent(page.extract);
-                            if (page.thumbnail) setFullImage(page.thumbnail.source);
-                        } catch (e) {
-                            console.error(e);
-                        } finally {
-                            setLoading(false);
-                        }
-                    };
-                    fetchDetails();
-                } else {
-                    setContent(null);
-                    setFullImage(null);
-                }
-            }, [isOpen, pageId]);
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
-                    
-                    <div className="relative bg-white w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl animate-fadeIn border border-gray-100">
-                        <button 
-                            onClick={onClose}
-                            className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/80 backdrop-blur rounded-full flex items-center justify-center hover:bg-white shadow-sm transition-all"
-                        >
-                            <Icon name="x" className="text-xl" />
-                        </button>
-
-                        {loading ? (
-                            <div className="h-96 flex items-center justify-center">
-                                <div className="animate-spin text-accent"><Icon name="spinner-gap" className="text-3xl" /></div>
-                            </div>
-                        ) : (
-                            <div>
-                                {fullImage && (
-                                    <div className="w-full h-64 md:h-80 overflow-hidden relative">
-                                        <img src={fullImage} className="w-full h-full object-cover" alt={title} />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                                        <h2 className="absolute bottom-6 left-6 md:left-10 text-3xl md:text-5xl font-serif font-bold text-white drop-shadow-md">
-                                            {title.replace(/\(video game\)/i, "")}
-                                        </h2>
-                                    </div>
-                                )}
-                                
-                                {!fullImage && (
-                                    <div className="p-8 md:p-10 pb-0">
-                                        <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink mb-4">
-                                            {title.replace(/\(video game\)/i, "")}
-                                        </h2>
-                                        <div className="h-1 w-20 bg-accent rounded-full"></div>
-                                    </div>
-                                )}
-
-                                <div className="p-8 md:p-10 space-y-6">
-                                    <div className="prose prose-lg prose-slate max-w-none font-light leading-relaxed text-gray-700">
-                                        <div dangerouslySetInnerHTML={{ __html: content }} />
-                                    </div>
-                                    
-                                    <div className="pt-8 border-t border-gray-100 flex justify-end">
-                                        <a 
-                                            href={`https://en.wikipedia.org/?curid=${pageId}`}
-                                            target="_blank"
-                                            className="flex items-center gap-2 text-sm font-semibold text-accent hover:text-blue-700 transition-colors"
-                                        >
-                                            View Full Wikipedia Article <Icon name="arrow-square-out" />
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
-        // --- Main App ---
-
-        const App = () => {
-            const [query, setQuery] = useState("");
-            const [results, setResults] = useState([]);
-            const [loading, setLoading] = useState(false);
-            const [selectedPage, setSelectedPage] = useState(null);
-            const [debouncedQuery, setDebouncedQuery] = useState("");
-
-            // Debounce logic
-            useEffect(() => {
-                const timer = setTimeout(() => {
-                    setDebouncedQuery(query);
-                }, 600);
-                return () => clearTimeout(timer);
-            }, [query]);
-
-            // Initial Load (Curated List)
-            useEffect(() => {
-                if (!debouncedQuery) {
-                    // Load a set of "Classics" initially if search is empty
-                    searchWikipedia("The Legend of Zelda video game|Half-Life 2|Portal 2|The Witcher 3|Elden Ring|Super Mario 64");
-                } else {
-                    searchWikipedia(debouncedQuery);
-                }
-            }, [debouncedQuery]);
-
-            const searchWikipedia = async (term) => {
+        // Fetch Data from Steam
+        React.useEffect(() => {
+            const fetchGames = async () => {
                 setLoading(true);
                 try {
-                    // Check if multiple terms separated by pipe (for initial list)
-                    const isMulti = term.includes("|");
-                    let params;
-
-                    if (isMulti) {
-                        // Title Search for curated list
-                        params = new URLSearchParams({
-                            action: "query",
-                            list: "search",
-                            srsearch: term.split("|").join(" OR "),
-                            srlimit: 12,
-                            format: "json",
-                            origin: "*"
-                        });
-                    } else {
-                        // General Search
-                        // We append "video game" to contextually filter, but users might type it themselves
-                        const cleanTerm = term.toLowerCase().includes("game") ? term : `${term} video game`;
-                        
-                        params = new URLSearchParams({
-                            action: "query",
-                            list: "search",
-                            srsearch: cleanTerm,
-                            srlimit: 12,
-                            format: "json",
-                            origin: "*"
-                        });
-                    }
-
-                    const res = await fetch(`${WIKI_API}?${params}`);
-                    const data = await res.json();
+                    // Fetch details for specific AppIDs using the Store API (which provides images/descriptions)
+                    const appIds = FEATURED_APP_IDS.join(',');
+                    // Encode URL component is critical for allorigins proxy
+                    const steamUrl = `https://store.steampowered.com/api/appdetails?appids=${appIds}`;
+                    const response = await fetch(`${CORS_PROXY}${encodeURIComponent(steamUrl)}`);
                     
-                    if (data.query && data.query.search) {
-                        setResults(data.query.search);
-                    }
-                } catch (e) {
-                    console.error("Search failed", e);
+                    if (!response.ok) throw new Error("Failed to fetch from Steam");
+                    
+                    const data = await response.json();
+                    
+                    const formattedGames = [];
+                    
+                    // Parse Steam API Response (structure is { "appID": { success: true, data: {...} } })
+                    // Note: allorigins might return stringified JSON depending on endpoint, usually .json() handles it
+                    // Check if contents are wrapped
+                    const rawData = data.contents ? JSON.parse(data.contents) : data;
+
+                    Object.keys(rawData).forEach(appId => {
+                        const appData = rawData[appId];
+                        if (appData.success && appData.data) {
+                            const d = appData.data;
+                            formattedGames.push({
+                                id: d.steam_appid,
+                                steam_appid: d.steam_appid,
+                                name: d.name,
+                                genre: d.genres ? d.genres[0].description : "Action", // Take primary genre
+                                all_genres: d.genres || [],
+                                metacritic: d.metacritic ? d.metacritic.score : null,
+                                release_date: d.release_date,
+                                developers: d.developers,
+                                short_description: d.short_description,
+                                header_image: d.header_image,
+                                price: d.price_overview ? d.price_overview.final_formatted : "Free",
+                                color: getGradient(d.steam_appid), // Generate consistent color
+                                icon: getGenreIcon(d.genres ? d.genres[0].description : "Game")
+                            });
+                        }
+                    });
+                    
+                    if(formattedGames.length === 0) throw new Error("No data returned");
+                    setGames(formattedGames);
+                    setIsOffline(false);
+                } catch (err) {
+                    console.warn("Steam API access failed, loading fallback data.", err);
+                    setGames(FALLBACK_GAMES);
+                    setIsOffline(true);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            return (
-                <div className="min-h-screen pb-20">
+            fetchGames();
+        }, []);
+
+        // Derive unique genres from fetched data
+        const genres = [...new Set(games.map(g => g.genre))];
+
+        // Filter Logic
+        const filteredGames = games.filter(game => {
+            const matchesGenre = selectedGenre === "All" || game.all_genres?.some(g => g.description === selectedGenre) || game.genre === selectedGenre;
+            const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchesGenre && matchesSearch;
+        });
+
+        return (
+            <div className="min-h-screen pb-20">
+                {/* Navbar */}
+                <nav className="glass-panel sticky top-0 z-40 border-b border-white/5">
+                    <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+                        {/* Logo */}
+                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setSelectedGenre("All"); setSearchQuery("")}}>
+                            <div className="w-8 h-8 bg-[#171a21] rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg border border-slate-600">
+                                <SteamLogo />
+                            </div>
+                            <h1 className="text-2xl font-extrabold tracking-tight text-white">Steam<span className="text-[#66c0f4]">DB</span></h1>
+                        </div>
+
+                        {/* Desktop Search */}
+                        <div className="hidden md:flex items-center relative group">
+                            <div className="absolute left-4 text-slate-400 group-focus-within:text-[#66c0f4] transition-colors">
+                                <SearchIcon />
+                            </div>
+                            <input 
+                                type="text" 
+                                placeholder="Search loaded games..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="bg-slate-800/50 border border-slate-700 text-white pl-12 pr-4 py-2.5 rounded-full w-64 focus:w-80 transition-all focus:outline-none focus:border-[#66c0f4] focus:bg-slate-800"
+                            />
+                        </div>
+                    </div>
+                </nav>
+
+                {/* Main Content */}
+                <main className="max-w-6xl mx-auto px-6 pt-8">
                     
-                    {/* Header */}
-                    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100">
-                        <div className="container mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 select-none" onClick={() => window.location.reload()}>
-                                <div className="w-10 h-10 bg-ink text-white rounded-lg flex items-center justify-center shadow-lg">
-                                    <Icon name="book-open-text" className="text-2xl" />
-                                </div>
-                                <h1 className="text-2xl font-serif font-bold tracking-tight text-ink">
-                                    Lumina
-                                </h1>
-                            </div>
-
-                            <div className="w-full md:w-[400px] relative">
-                                <Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search the archives..." 
-                                    className="w-full bg-subtle border-none rounded-full py-3 pl-12 pr-4 text-ink placeholder-gray-400 focus:ring-2 focus:ring-accent/20 transition-all outline-none"
-                                    value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
-                                />
-                                {query && (
-                                    <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-ink p-1">
-                                        <Icon name="x-circle" weight="fill" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* Main Content */}
-                    <main className="container mx-auto px-6 py-10">
-                        
-                        <div className="mb-8">
-                            <h2 className="text-xl font-medium text-gray-400 font-serif italic">
-                                {loading ? "Scanning archives..." : query ? `Results for "${query}"` : "Curated Selection"}
+                    {/* Hero Text */}
+                    <div className="mb-8 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-4xl md:text-5xl font-bold text-white mb-2">
+                                Powered by <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#66c0f4] to-blue-600">Steam</span>
                             </h2>
+                            <p className="text-slate-400 text-lg">Real-time data from the Valve network.</p>
                         </div>
-
-                        {loading && results.length === 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                                {[1,2,3,4,5,6].map(n => (
-                                    <div key={n} className="h-80 bg-subtle rounded-xl animate-pulse"></div>
-                                ))}
+                        
+                        {/* Offline Indicator */}
+                        {isOffline && (
+                            <div className="hidden md:flex items-center space-x-2 bg-amber-900/30 text-amber-400 px-4 py-2 rounded-xl border border-amber-500/20">
+                                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                                <span className="text-xs font-bold uppercase tracking-wider">Offline Mode</span>
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                                {results.map((item, index) => (
-                                    <Card 
-                                        key={item.pageid}
-                                        pageId={item.pageid}
-                                        title={item.title}
-                                        snippet={item.snippet}
-                                        delay={index * 50} // Staggered animation
-                                        onClick={() => setSelectedPage({ id: item.pageid, title: item.title })}
+                        )}
+                    </div>
+
+                    {/* Mobile Search */}
+                    <div className="md:hidden mb-6 relative">
+                        <div className="absolute left-4 top-3 text-slate-400">
+                            <SearchIcon />
+                        </div>
+                        <input 
+                            type="text" 
+                            placeholder="Search..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-2xl focus:outline-none focus:border-[#66c0f4]"
+                        />
+                    </div>
+
+                    {/* Filters */}
+                    <FilterBar 
+                        genres={genres} 
+                        selected={selectedGenre} 
+                        onSelect={setSelectedGenre} 
+                    />
+
+                    {/* Loading State */}
+                    {loading && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {[1,2,3,4,5,6,7,8].map(i => (
+                                <div key={i} className="bg-slate-800 rounded-3xl overflow-hidden h-80 border border-slate-700/50">
+                                    <div className="h-40 w-full loading-shimmer"></div>
+                                    <div className="p-5 space-y-3">
+                                        <div className="h-4 w-20 rounded loading-shimmer"></div>
+                                        <div className="h-6 w-3/4 rounded loading-shimmer"></div>
+                                        <div className="h-4 w-1/2 rounded loading-shimmer"></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Grid */}
+                    {!loading && (
+                        filteredGames.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {filteredGames.map(game => (
+                                    <GameCard 
+                                        key={game.id} 
+                                        game={game} 
+                                        onClick={setSelectedGame} 
                                     />
                                 ))}
                             </div>
-                        )}
-
-                        {!loading && results.length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-20 text-center">
-                                <Icon name="magnifying-glass" className="text-6xl text-gray-200 mb-4" />
-                                <p className="text-xl text-gray-400 font-serif italic">No records found.</p>
-                                <p className="text-gray-400 text-sm mt-2">Try adding "video game" to your search.</p>
+                        ) : (
+                            <div className="text-center py-20">
+                                <div className="inline-block p-6 bg-slate-800 rounded-full mb-4 text-slate-500">
+                                    <SearchIcon />
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-1">No games found</h3>
+                                <p className="text-slate-400">Try adjusting your filters.</p>
                             </div>
-                        )}
+                        )
+                    )}
+                </main>
 
-                    </main>
+                {/* Footer */}
+                <footer className="mt-20 border-t border-slate-800 py-10 text-center text-slate-500 text-sm">
+                    <p>Data provided by Steam API. Not affiliated with Valve Corporation.</p>
+                </footer>
 
-                    {/* Details Modal */}
-                    <Modal 
-                        isOpen={!!selectedPage}
-                        onClose={() => setSelectedPage(null)}
-                        pageId={selectedPage?.id}
-                        title={selectedPage?.title || ""}
-                    />
+                {/* Modal Layer */}
+                {selectedGame && (
+                    <Modal game={selectedGame} onClose={() => setSelectedGame(null)} />
+                )}
+            </div>
+        );
+    };
 
-                    {/* Footer */}
-                    <footer className="border-t border-gray-100 mt-20 py-10">
-                        <div className="container mx-auto px-6 text-center text-secondary text-sm">
-                            <p className="flex items-center justify-center gap-2 mb-2">
-                                <Icon name="copyright" /> 
-                                Data provided by <a href="https://wikipedia.org" className="underline hover:text-ink">Wikipedia</a>
-                            </p>
-                            <p className="opacity-60">Lumina Encyclopedia &copy; 2024</p>
-                        </div>
-                    </footer>
-                </div>
-            );
-        };
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+</script>
 </body>
 </html>
